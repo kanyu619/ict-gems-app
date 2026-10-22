@@ -111,7 +111,8 @@ def trade_field(raw):
     }
 
 TF_RX = re.compile(r"alle Timeframes|\b(?:M1|M5|M15|M30|H1|H4|Daily|Weekly)\b|\d+\s?-?min", re.I)
-WIN_RX = re.compile(r"(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})")
+# Uhrzeiten immer zweistellig (07:00–09:00); Video-Zeitstempel wie 0:10–0:15 sind keine Fenster
+WIN_RX = re.compile(r"(?<![\d:])(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})(?![\d:])")
 
 def svg_uri(name):
     p = os.path.join(LIB, "Bilder", name)
@@ -154,10 +155,43 @@ for fn in sorted(os.listdir(kdir)):
     svg_name = emb.group(1) if emb else fn[:-3] + ".svg"
     svg = svg_uri(svg_name)
 
-    steps = [{"n": r[0], "name": inline(r[1]), "see": inline(r[2])}
-             for r in table(find_sec(secs, "So läuft"))[1:] if len(r) >= 3]
+    # Tabelle darf mehr als 3 Spalten haben (z. B. Silver Bullet: Fenster | Deutsche Zeit | Für dich):
+    # weitere Spalten werden mit ihrer Überschrift angehängt, nichts geht verloren.
+    srows = table(find_sec(secs, "So läuft"))
+    shead = srows[0] if srows else []
+    steps = []
+    for r in srows[1:]:
+        if len(r) < 3:
+            continue
+        see = inline(r[2])
+        for i in range(3, len(r)):
+            if r[i].strip():
+                lab = shead[i].strip() if i < len(shead) and shead[i].strip() else ""
+                see += " · " + ((inline(lab) + ": ") if lab else "") + inline(r[i])
+        steps.append({"n": r[0], "name": inline(r[1]), "see": see, "no": "❌" in " ".join(r)})
     steps_note = [inline(l) for l in find_sec(secs, "So läuft")
                   if l.strip() and not l.strip().startswith("|")]
+
+    # Weitere Abschnitte der Karte (z. B. „Richtig einzeichnen“) mit eigenen Skizzen – 1:1 übernommen
+    KNOWN = ("so läuft", "checkliste", "trade auf", "zeit")
+    extra = []
+    for sk, sl in secs.items():
+        if any(k in sk.lower() for k in KNOWN):
+            continue
+        imgs, items = [], []
+        for l in sl:
+            l = l.strip()
+            if not l:
+                continue
+            m2 = re.search(r"!\[\[([^\]]+\.svg)\]\]", l)
+            if m2:
+                u = svg_uri(m2.group(1))
+                if u:
+                    imgs.append(u)
+                continue
+            items.append(inline(re.sub(r"^-\s*", "", l)))
+        if imgs or items:
+            extra.append({"title": inline(sk), "svgs": imgs, "items": items})
 
     checks = [inline(re.sub(r"^- \[ \]\s*", "", l.strip()))
               for l in find_sec(secs, "Checkliste") if l.strip().startswith("- [ ]")]
@@ -176,13 +210,22 @@ for fn in sorted(os.listdir(kdir)):
     tfs, windows, zeit_notes = [], [], []
     for l in zeit_lines:
         is_d = "*Deutung:*" in l
-        for t in TF_RX.findall(l):
-            label = "alle TF" if t.lower().startswith("alle") else t
-            tfs.append({"t": label, "d": is_d})
+        # "Timeframe nicht genannt. Der Chart zeigt eine 60-min-FVG …" -> kein Timeframe-Chip
+        if not re.search(r"timeframe[^.]*nicht genannt", l, re.I):
+            for t in TF_RX.findall(l):
+                label = "alle TF" if t.lower().startswith("alle") else t
+                tfs.append({"t": label, "d": is_d})
         if not is_d:
             for a, b in WIN_RX.findall(l):
                 windows.append([a, b])
         zeit_notes.append(inline(l))
+    # Zeitfenster stehen in der Ablauf-Tabelle (Silver Bullet: „Fenster siehe oben“):
+    # Zeilen, die die Karte selbst mit ❌ markiert, zählen nicht für den Jetzt-Filter.
+    if not windows:
+        for r in srows[1:]:
+            if len(r) >= 2 and "❌" not in " ".join(r):
+                for a, b in WIN_RX.findall(r[1]):
+                    windows.append([a, b])
     # Duplikate raus
     seen, tfu = set(), []
     for t in tfs:
@@ -199,9 +242,11 @@ for fn in sorted(os.listdir(kdir)):
         plan_status = "passt nicht"
     elif first.startswith("ja") or first.startswith("nur mit"):
         plan_status = "passt"
+    elif re.search(r"\bja\b", first.split(".")[0]) and not re.search(r"\bnein\b", first.split(".")[0]):
+        plan_status = "passt"      # z. B. „**Fenster 2 ja**, die anderen kaum.“ -> passt (bedingt)
     else:
         plan_status = "unklar"
-    plan_bedingt = first.startswith("nur mit")
+    plan_bedingt = plan_status == "passt" and not first.startswith("ja")
 
     video_c = next((c for c in cos if c["type"] == "example"), None)
     detail_c = next((c for c in cos if c["type"] == "note"), None)
@@ -255,6 +300,7 @@ for fn in sorted(os.listdir(kdir)):
         "planLines": [inline(l) for l in plan_lines],
         "video": [inline(l) for l in (video_c["body"] if video_c else []) if l],
         "details": detail_items, "unklar": unklar, "hash": src_hash, "lack": lack,
+        "extra": extra,
     })
 
 # ---------- Fehlermuster (3 häufigste, Zahlen aus der Notiz geprüft) ----------
@@ -317,6 +363,8 @@ print(json.dumps(report, ensure_ascii=False, indent=1))
 
 # ---------- Vault-Notiz "ICT Gems App.md" ----------
 URL = sys.argv[3] if len(sys.argv) > 3 else "(noch nicht veröffentlicht)"
+def trade_missing(c):
+    return any(k in c["lack"] or (k + " (nur Deutung)") in c["lack"] for k in ("SL", "TP"))
 rows = []
 for c in concepts:
     pl = c["plan"] + (" (bedingt)" if c["planBedingt"] else "")
@@ -351,7 +399,7 @@ Ausgeblendet (Plan passt nicht): {', '.join(report['ausgeblendet']) or 'keins'}
 
 ## So funktioniert die App
 - Startseite: Kacheln nach Stufe der Landkarte, Badges Backtest + Plan. „Plan: passt nicht“ ist ausgeblendet (Schalter „alle zeigen“). Suche findet Namen + aliases.
-- **Jetzt-Filter:** Karte nennt eine Zeit → die gilt (NY-Zeit). Karte nennt keine → Plan-Fenster NY AM 09:30–11:00 / NY PM 13:30–16:00 (nur A+). Umrechnung nach Berlin automatisch, auch in der Zeitumstellungs-Woche.
+- **Jetzt-Filter:** Karte nennt eine Zeit → sie zählt nur innerhalb der Plan-Fenster NY AM 09:30–11:00 / NY PM 13:30–16:00 (nur A+); Fenster außerhalb des Plans stehen als Chip mit ⚠️ „außerhalb Plan“. Karte nennt keine Zeit → Plan-Fenster. Zeilen, die die Karte mit ❌ markiert (Silver Bullet London/07–09), zählen nicht. Umrechnung nach Berlin automatisch, auch in der Zeitumstellungs-Woche.
 - Konzept-Ansicht: Skizze (Vollbild per Tipp), Checkliste → Ampel unten, Trade auf einen Blick, Zeit-Chips, Plan-Box rot, Rest eingeklappt.
 - „— fehlt in Karte“ = steht nicht in der Karte. ⚠️ Deutung / ⚠️ Unklar = aus der Karte übernommen.
 - Fehler-Leiste (3 häufigste aus [[Fehlermuster FTMO-Trades]]): Entry ohne M5-MSS (78 von 97) · Gegen die Tagesrichtung (67 Trades) · Teil-TP nicht gesichert (70 % der Verlierer vorher ≥ 20 Pkt im Plus).
@@ -362,10 +410,12 @@ Ausgeblendet (Plan passt nicht): {', '.join(report['ausgeblendet']) or 'keins'}
 2. `App/gems_app_build.py` erzeugt die App neu aus `App/gems_app_template.html` und vergleicht mit der Hash-Spalte oben (neu/geändert).
 3. Inhalt von `out/pwa/` ins GitHub-Repo `kanyu619/ict-gems-app` (Branch main) pushen → Handy-App aktualisiert sich beim nächsten Öffnen mit Netz. Artifact-Link wird ebenfalls überschrieben, diese Notiz + Logbuch werden aktualisiert.
 4. Meldung: neue/geänderte Konzepte + Karten mit Lücken.
-- Karte kann den Plan-Status fest vorgeben mit `plan: passt` oder `plan: passt nicht` im YAML-Kopf. Sonst liest die App den ersten Satz der Plan-Box („Ja“ / „Nur mit …“ = passt, „Nein“ = passt nicht).
+- Karte kann den Plan-Status fest vorgeben mit `plan: passt` oder `plan: passt nicht` im YAML-Kopf. Sonst liest die App den ersten Satz der Plan-Box („Ja“ / „Nur mit …“ = passt, „Nein“ = passt nicht, „… ja, …“ wie „Fenster 2 ja“ = passt (bedingt)).
+- Weitere `##`-Abschnitte einer Karte (z. B. „Richtig einzeichnen“ mit zweiter Skizze) erscheinen eingeklappt in der Konzept-Ansicht.
 
 ## Offen
-- [ ] SL, TP und Zeitfenster fehlen in beiden Karten – kommen erst mit weiteren Videos oder eigenem Backtest.
+- [ ] SL und TP fehlen in: {', '.join(c['abk'] for c in concepts if trade_missing(c)) or 'keiner'} – kommen erst mit weiteren Videos oder eigenem Backtest.
+- [ ] Zeitfenster fehlen in: {', '.join(c['abk'] for c in concepts if 'Zeitfenster' in c['lack']) or 'keiner'}.
 
 Zurück: [[ICT Gems Bibliothek]] · [[00 Start]]
 """

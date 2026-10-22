@@ -1,5 +1,5 @@
-// ICT Gems App – Offline-Speicher. Version e6e9b1bd6c (ändert sich bei jedem Neubau)
-const C='gems-e6e9b1bd6c', CORE=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png'];
+// ICT Gems App – Offline-Speicher. Version c6acc3ee2f (ändert sich bei jedem Neubau)
+const C='gems-c6acc3ee2f', CORE=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(CORE)));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))));self.clients.claim()});
 self.addEventListener('fetch',e=>{

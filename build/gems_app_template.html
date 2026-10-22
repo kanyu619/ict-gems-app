@@ -141,6 +141,8 @@ details[open] summary::after{content:"–"}
 .steps{display:flex;flex-direction:column;gap:6px}
 .steps div{display:flex;gap:10px}
 .steps .n{width:24px;height:24px;border-radius:50%;background:var(--step);color:#1a1e20;font:700 13px var(--f-display);display:grid;place-items:center;flex:none}
+.steps .no{color:var(--muted)} .steps .no .n{background:var(--gray-soft);color:var(--muted)}
+.xsk{display:block;width:100%;max-height:30vh;object-fit:contain;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:4px;margin:4px 0 8px;cursor:zoom-in}
 .unk{color:var(--stepInk)}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--surface);border-top:1px solid var(--line);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px));padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));display:flex;gap:10px;align-items:center}
 .amp{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border-radius:12px;padding:8px 12px;min-height:56px}
@@ -215,9 +217,12 @@ function timeCtx(){
   if(!next){next=wins[0];const days=ny.wd==='Fri'?3:ny.wd==='Sat'?2:1;inMin=days*1440-ny.min+next.a; if(!wk&&ny.wd==='Sun'){inMin=1440-ny.min+next.a}}
   return{ny,be,off,wk,active,next,inMin};
 }
+/* Karten-Fenster zählen nur innerhalb der Plan-Fenster (Plan gilt). Karte nennt keine Zeit -> Plan-Fenster. */
+const inPlan = ([a,b]) => D.plan.windows.some(w=>toMin(a)<toMin(w.to)&&toMin(b)>toMin(w.from));
 function conceptActive(c,t){
-  if(c.windows&&c.windows.length){return t.wk&&c.windows.some(([a,b])=>t.ny.min>=toMin(a)&&t.ny.min<toMin(b))}
-  return !!t.active; // Karte nennt keine Zeit -> Plan-Fenster
+  if(!t.active)return false;
+  if(c.windows&&c.windows.length){return c.windows.some(([a,b])=>t.ny.min>=toMin(a)&&t.ny.min<toMin(b))}
+  return true;
 }
 function renderClock(){
   const t=timeCtx();
@@ -290,7 +295,7 @@ function field(f){
 function renderView(c){
   const v=$('#view');
   const ch=state.checks[c.id]||(state.checks[c.id]=c.checks.map(()=>false));
-  const wins=c.windows&&c.windows.length?c.windows.map(w=>'<span class="chip mono">'+w[0]+'–'+w[1]+' NY</span>').join(''):
+  const wins=c.windows&&c.windows.length?c.windows.map(w=>inPlan(w)?'<span class="chip mono">'+w[0]+'–'+w[1]+' NY</span>':'<span class="chip mono d">⚠️ '+w[0]+'–'+w[1]+' NY · außerhalb Plan</span>').join(''):
     '<span class="chip m">Zeitfenster — fehlt in Karte</span><span class="chip mono">Plan: NY AM 09:30–11:00</span>';
   const tfs=c.tfs.length?c.tfs.map(t=>'<span class="chip'+(t.d?' d':'')+'">'+(t.d?'⚠️ ':'')+esc(t.t)+'</span>').join(''):'<span class="chip m">Timeframes — fehlt in Karte</span>';
   const T=c.trade;
@@ -311,7 +316,8 @@ function renderView(c){
    '<div class="block"><div class="lbl">Zeitfenster · Timeframes</div><div class="chips">'+wins+tfs+'</div></div>'+
    (c.planLines.length?'<div class="planbox"><div class="lbl">⚠️ Passt zu meinem Plan?</div>'+c.planLines.map(l=>'<p>'+l+'</p>').join('')+'</div>':'<div class="planbox"><div class="lbl">Plan-Abgleich</div><p class="miss">— fehlt in Karte</p></div>')+
    (c.unklar.length?'<details open><summary>⚠️ Unklar in der Karte ('+c.unklar.length+')</summary><div class="dbody"><ul>'+c.unklar.map(u=>'<li class="unk">'+u+'</li>').join('')+'</ul></div></details>':'')+
-   (c.steps.length?'<details><summary>So läuft\'s ab</summary><div class="dbody"><div class="steps">'+c.steps.map(s=>'<div><span class="n">'+esc(s.n)+'</span><span><b>'+s.name+'</b> – '+s.see+'</span></div>').join('')+'</div>'+(c.stepsNote.length?'<p>'+c.stepsNote.join('<br>')+'</p>':'')+'</div></details>':'')+
+   (c.steps.length?'<details><summary>So läuft\'s ab</summary><div class="dbody"><div class="steps">'+c.steps.map(s=>'<div'+(s.no?' class="no"':'')+'><span class="n">'+esc(s.n)+'</span><span><b>'+s.name+'</b> – '+s.see+'</span></div>').join('')+'</div>'+(c.stepsNote.length?'<p>'+c.stepsNote.join('<br>')+'</p>':'')+'</div></details>':'')+
+   (c.extra||[]).map(x=>'<details><summary>'+x.title+'</summary><div class="dbody">'+x.svgs.map(u=>'<img class="xsk" alt="" src="'+u+'" data-src="'+u+'">').join('')+(x.items.length?'<ul>'+x.items.map(i=>'<li>'+i+'</li>').join('')+'</ul>':'')+'</div></details>').join('')+
    (c.zeitNotes.length?'<details><summary>Zeit & Timeframes (Karte)</summary><div class="dbody"><ul>'+c.zeitNotes.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
    (c.details.length?'<details><summary>Details, Varianten, Quellen</summary><div class="dbody"><ul>'+c.details.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
    (c.video.length?'<details><summary>📸 Aus dem Video</summary><div class="dbody"><p>'+c.video.join('<br>')+'</p></div></details>':'')+
@@ -328,7 +334,9 @@ function renderView(c){
   const sz=$('#satz');if(sz)sz.onclick=()=>sz.classList.toggle('open');
   $('#rst').onclick=()=>{ch.fill(false);v.querySelectorAll('.chk').forEach(b=>{b.setAttribute('aria-checked','false');b.querySelector('.box').textContent=''});amp()};
   $('#back').onclick=()=>{location.hash=''};
-  const sk=$('#skBtn');if(sk)sk.onclick=()=>{$('#fullImg').src=c.svg;$('#full').hidden=false;const f=$('#full');if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};
+  const openFull=src=>{$('#fullImg').src=src;$('#full').hidden=false;const f=$('#full');if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};
+  const sk=$('#skBtn');if(sk)sk.onclick=()=>openFull(c.svg);
+  v.querySelectorAll('.xsk').forEach(im=>im.onclick=()=>openFull(im.dataset.src));
 }
 function closeFull(){$('#full').hidden=true;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 $('#full').onclick=closeFull;
