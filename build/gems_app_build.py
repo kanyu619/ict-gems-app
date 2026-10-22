@@ -266,8 +266,9 @@ for fn in sorted(os.listdir(kdir)):
         plan_status = "passt nicht"
     elif first.startswith("ja") or first.startswith("nur") or first.startswith("teilweise"):
         plan_status = "passt"      # „Nur mit …“, „Nur eingeschränkt“, „Teilweise“ -> passt (bedingt)
-    elif re.search(r"\bja\b", first.split(".")[0]) and not re.search(r"\bnein\b", first.split(".")[0]):
-        plan_status = "passt"      # z. B. „**Fenster 2 ja**, die anderen kaum.“ -> passt (bedingt)
+    elif re.search(r"\bja\b", first.split(".")[0]) and (not re.search(r"\bnein\b", first.split(".")[0])
+            or first.split(".")[0].find(" ja") < first.split(".")[0].find("nein")):
+        plan_status = "passt"      # „Fenster 2 ja, die anderen kaum.“ / „Als Zone ja, als Signal nein.“ -> passt (bedingt)
     else:
         plan_status = "unklar"
     plan_bedingt = plan_status == "passt" and not first.startswith("ja")
