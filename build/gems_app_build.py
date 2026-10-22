@@ -112,7 +112,7 @@ def trade_field(raw):
 
 TF_RX = re.compile(r"alle Timeframes|\b(?:M1|M5|M15|M30|H1|H4|Daily|Weekly)\b|\d+\s?-?min", re.I)
 # Uhrzeiten immer zweistellig (07:00–09:00); Video-Zeitstempel wie 0:10–0:15 sind keine Fenster
-WIN_RX = re.compile(r"(?<![\d:])(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})(?![\d:])")
+WIN_RX = re.compile(r"(?<![\d:])(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})(?!\d)")
 
 def svg_uri(name):
     p = os.path.join(LIB, "Bilder", name)
@@ -125,7 +125,8 @@ def svg_uri(name):
 # ---------- Landkarte ----------
 index_md = read(os.path.join(LIB, "ICT Gems Bibliothek.md"))
 stufen = []
-for node, label in re.findall(r'(\w)\["([^"]+)"\]', index_md):
+# Nur Hauptknoten A–E (ein Buchstabe) sind Stufen; Unterknoten wie C1, D4 haben Ziffern
+for node, label in re.findall(r'(?<![\w])([A-Z])\["([^"]+)"\]', index_md):
     name, _, sub = label.partition("<br/>")
     icon, _, nm = name.strip().partition(" ")
     if nm in [s["name"] for s in stufen]:
@@ -148,7 +149,9 @@ for fn in sorted(os.listdir(kdir)):
     m = re.search(r"\(([^)]+)\)\s*$", title)
     abk = m.group(1) if m else (fm.get("aliases") or [title])[0]
     name = re.sub(r"\s*\([^)]+\)\s*$", "", title)
-    cid = re.sub(r"[^a-z0-9]", "", abk.lower()) or re.sub(r"[^a-z0-9]", "", name.lower())[:12]
+    if len(abk) > 14:  # Klammerzusatz ist keine Abkürzung (z. B. „Konsolidierung ≠ Akkumulation“) -> Name groß, Zusatz klein
+        abk, name = name, title
+    cid =re.sub(r"[^a-z0-9]", "", abk.lower()) or re.sub(r"[^a-z0-9]", "", name.lower())[:12]
 
     satz = next((" ".join(c["body"]) for c in cos if "einem satz" in c["title"].lower()), "")
     emb = re.search(r"!\[\[([^\]]+\.svg)\]\]", body)
@@ -240,8 +243,8 @@ for fn in sorted(os.listdir(kdir)):
         plan_status = pf
     elif first.startswith("nein"):
         plan_status = "passt nicht"
-    elif first.startswith("ja") or first.startswith("nur mit"):
-        plan_status = "passt"
+    elif first.startswith("ja") or first.startswith("nur") or first.startswith("teilweise"):
+        plan_status = "passt"      # „Nur mit …“, „Nur eingeschränkt“, „Teilweise“ -> passt (bedingt)
     elif re.search(r"\bja\b", first.split(".")[0]) and not re.search(r"\bnein\b", first.split(".")[0]):
         plan_status = "passt"      # z. B. „**Fenster 2 ja**, die anderen kaum.“ -> passt (bedingt)
     else:
