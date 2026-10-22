@@ -144,6 +144,27 @@ details[open] summary::after{content:"–"}
 .steps .no{color:var(--muted)} .steps .no .n{background:var(--gray-soft);color:var(--muted)}
 .xsk{display:block;width:100%;max-height:30vh;object-fit:contain;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:4px;margin:4px 0 8px;cursor:zoom-in}
 .unk{color:var(--stepInk)}
+/* Aus den Videos */
+.vids{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.vid{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.vhd{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;min-height:44px;padding:8px 12px;border:0;background:none;text-align:left;cursor:pointer}
+.vhd .vd{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.vhd .vt{font:600 15px var(--f-display);letter-spacing:.01em;flex:1 1 60%}
+.vhd .vts{font-family:var(--f-mono);font-size:12px;color:var(--stepInk)}
+.vhd::after{content:"+";margin-left:auto;color:var(--muted);font-size:18px}
+.vhd.open::after{content:"–"}
+.vbody{padding:0 12px 10px;font-size:14px}
+.vbody .vk{margin:0 0 6px}
+.vr{display:flex;flex-direction:column;gap:4px;margin:4px 0 8px}
+.vr div{display:flex;gap:8px}.vr .vrt{font-family:var(--f-mono);font-size:12px;color:var(--muted);flex:none;min-width:72px;padding-top:2px}
+.vlink{display:inline-block;font:600 14px var(--f-display);color:var(--sl);text-decoration:none;border:1px solid var(--sl);border-radius:20px;padding:6px 12px;min-height:36px}
+.vo{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.legend{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+/* Backtest-Lab */
+.lab{display:flex;flex-direction:column;gap:6px}
+.labq{display:flex;flex-direction:column;gap:6px;width:100%;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--step);border-radius:12px;background:var(--surface);text-align:left;cursor:pointer}
+.labq .lq{font-size:15px;line-height:1.3}
+.labq .lm{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font:600 13px var(--f-display);color:var(--muted)}
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--surface);border-top:1px solid var(--line);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px));padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));display:flex;gap:10px;align-items:center}
 .amp{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border-radius:12px;padding:8px 12px;min-height:56px}
 .amp .lamp{width:22px;height:22px;border-radius:50%;flex:none}
@@ -183,6 +204,7 @@ details[open] summary::after{content:"–"}
   <div class="fehler"><div class="lbl">Vor jedem Trade · meine 3 häufigsten Fehler</div><div class="fchips" id="fehlerHome"></div></div>
   <div class="map" id="map"></div>
   <div id="list"></div>
+  <section class="stufe" id="lab"></section>
   <footer class="foot" id="foot"></footer>
 </main>
 
@@ -281,6 +303,15 @@ $('#q').addEventListener('input',e=>{state.q=e.target.value;renderHome()});
 $('#clr').onclick=()=>{state.q='';$('#q').value='';renderHome();$('#q').focus()};
 $('#fNow').onclick=()=>{state.now=!state.now;store.set('now',state.now);renderHome()};
 $('#fAll').onclick=()=>{state.all=!state.all;store.set('all',state.all);renderHome()};
+/* Backtest-Lab: Prüffragen aus den Karten (flache Liste) */
+(function(){
+  const qs=[];D.concepts.forEach(c=>c.fragen.forEach(q=>qs.push({c,q})));
+  const ohne=D.concepts.filter(c=>!c.fragen.length).map(c=>c.abk);
+  $('#lab').innerHTML='<div class="sthead"><h2>🧪 Backtest-Lab</h2><span>Prüffragen aus den Karten</span></div>'+
+    (qs.length?'<div class="lab">'+qs.map(x=>'<button class="labq" data-id="'+x.c.id+'"><span class="lq">'+x.q+'</span><span class="lm"><b>'+esc(x.c.abk)+'</b> · '+badges(x.c)+'</span></button>').join('')+'</div>':'<p class="miss">— keine Prüffrage in den Karten</p>')+
+    (ohne.length?'<div class="emptyst">Ohne Prüffrage in der Karte: '+esc(ohne.join(' · '))+'</div>':'');
+  $('#lab').addEventListener('click',e=>{const b=e.target.closest('.labq');if(b)location.hash=b.dataset.id});
+})();
 $('#fehlerHome').innerHTML=D.fehler.map(f=>'<div class="fchip"><b>'+esc(f.q)+'</b><span>'+esc(f.sub)+'</span></div>').join('');
 $('#foot').innerHTML='Stand '+esc(D.stand)+' · '+D.concepts.length+' Konzepte aus der ICT Gems Bibliothek.<br>Abgleich-Werkzeug, kein Signalgeber. Karte ungetestet → '+esc('Trading-Plan ab 15.10.2026')+' gilt.';
 
@@ -304,6 +335,11 @@ function renderView(c){
    '<div class="badges" style="padding-top:0;margin:0 0 8px">'+badges(c)+'</div>'+
    (c.svg?'<button class="vsk" id="skBtn" aria-label="Skizze im Vollbild"><img alt="Skizze '+esc(c.abk)+'" src="'+c.svg+'"><span class="hint">VOLLBILD</span></button>':'<div class="planbox"><span class="miss">Skizze — fehlt in Karte</span></div>')+
    (c.satz?'<p class="satz" id="satz">'+c.satz+'</p>':'')+
+   '<div class="block"><div class="lbl">Aus den Videos · Quelle: '+(c.quelle==='ICT Gems'?'ICT Gems':'<span class="unk">⚠️ '+esc(c.quelle)+', nicht ICT Gems</span>')+'</div>'+
+     (c.videos.length?'<div class="vids">'+c.videos.map((v,i)=>'<div class="vid"><button class="vhd" data-i="'+i+'"><span class="vd">'+esc(v.datum)+'</span><span class="vt">'+esc(v.titel)+'</span>'+(v.ts?'<span class="vts">@ '+esc(v.ts)+'</span>':'')+'</button>'+
+       '<div class="vbody" hidden>'+(v.kern?'<p class="vk">'+v.kern+'</p>':'')+(v.regeln.length?'<div class="vr">'+v.regeln.map(r=>'<div><span class="vrt">'+esc(r.t)+'</span><span>'+r.r+'</span></div>').join('')+'</div>':'')+
+       (v.url?'<a class="vlink" href="'+esc(v.url)+'" target="_blank" rel="noopener">▶ Short auf YouTube'+(v.laenge?' · '+esc(v.laenge):'')+'</a>':'')+(v.orig?'<p class="vo">Original: '+esc(v.orig)+'</p>':'')+(!v.kern&&!v.regeln.length&&!v.url?'<p class="miss">Video-Notiz fehlt</p>':'')+'</div></div>').join('')+'</div>':'<p class="miss">— kein Video in der Karte verlinkt</p>')+'</div>'+
+   (c.steps.length?'<div class="block"><div class="lbl">So erkennst du es</div><div class="steps">'+c.steps.map(s=>'<div'+(s.no?' class="no"':'')+'><span class="n">'+esc(s.n)+'</span><span><b>'+s.name+'</b> – '+s.see+'</span></div>').join('')+'</div>'+(c.stepsNote.length?'<p class="vo">'+c.stepsNote.join('<br>')+'</p>':'')+'<p class="legend">ohne Marke = aus dem Video · <span class="tag-d">⚠️ Deutung</span>= Auslegung · <span class="tag-p">Mein Plan</span>= eigene Regel</p></div>':'')+
    '<div class="block fmini">'+D.fehler.map(f=>'<span>'+esc(f.q)+'</span>').join('')+'</div>'+
    '<div class="block"><div class="lbl">Checkliste – nur wenn alles ✔</div><div class="checks">'+
      (c.checks.length?c.checks.map((t,i)=>'<button class="chk" role="checkbox" aria-checked="'+ch[i]+'" data-i="'+i+'"><span class="box">'+(ch[i]?'✓':'')+'</span><span class="ct">'+t+'</span></button>').join(''):MISS)+'</div></div>'+
@@ -316,7 +352,6 @@ function renderView(c){
    '<div class="block"><div class="lbl">Zeitfenster · Timeframes</div><div class="chips">'+wins+tfs+'</div></div>'+
    (c.planLines.length?'<div class="planbox"><div class="lbl">⚠️ Passt zu meinem Plan?</div>'+c.planLines.map(l=>'<p>'+l+'</p>').join('')+'</div>':'<div class="planbox"><div class="lbl">Plan-Abgleich</div><p class="miss">— fehlt in Karte</p></div>')+
    (c.unklar.length?'<details open><summary>⚠️ Unklar in der Karte ('+c.unklar.length+')</summary><div class="dbody"><ul>'+c.unklar.map(u=>'<li class="unk">'+u+'</li>').join('')+'</ul></div></details>':'')+
-   (c.steps.length?'<details><summary>So läuft\'s ab</summary><div class="dbody"><div class="steps">'+c.steps.map(s=>'<div'+(s.no?' class="no"':'')+'><span class="n">'+esc(s.n)+'</span><span><b>'+s.name+'</b> – '+s.see+'</span></div>').join('')+'</div>'+(c.stepsNote.length?'<p>'+c.stepsNote.join('<br>')+'</p>':'')+'</div></details>':'')+
    (c.extra||[]).map(x=>'<details><summary>'+x.title+'</summary><div class="dbody">'+x.svgs.map(u=>'<img class="xsk" alt="" src="'+u+'" data-src="'+u+'">').join('')+(x.items.length?'<ul>'+x.items.map(i=>'<li>'+i+'</li>').join('')+'</ul>':'')+'</div></details>').join('')+
    (c.zeitNotes.length?'<details><summary>Zeit & Timeframes (Karte)</summary><div class="dbody"><ul>'+c.zeitNotes.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
    (c.details.length?'<details><summary>Details, Varianten, Quellen</summary><div class="dbody"><ul>'+c.details.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
@@ -332,6 +367,7 @@ function renderView(c){
   v.querySelectorAll('.chk').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;ch[i]=!ch[i];b.setAttribute('aria-checked',ch[i]);b.querySelector('.box').textContent=ch[i]?'✓':'';amp()});
   v.querySelectorAll('.tf').forEach(b=>b.onclick=()=>b.classList.toggle('open'));
   const sz=$('#satz');if(sz)sz.onclick=()=>sz.classList.toggle('open');
+  v.querySelectorAll('.vhd').forEach(b=>b.onclick=()=>{const bd=b.nextElementSibling;bd.hidden=!bd.hidden;b.classList.toggle('open',!bd.hidden)});
   $('#rst').onclick=()=>{ch.fill(false);v.querySelectorAll('.chk').forEach(b=>{b.setAttribute('aria-checked','false');b.querySelector('.box').textContent=''});amp()};
   $('#back').onclick=()=>{location.hash=''};
   const openFull=src=>{$('#fullImg').src=src;$('#full').hidden=false;const f=$('#full');if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};

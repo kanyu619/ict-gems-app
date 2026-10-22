@@ -135,6 +135,27 @@ for node, label in re.findall(r'(?<![\w])([A-Z])\["([^"]+)"\]', index_md):
         continue
     stufen.append({"name": nm.strip(), "icon": icon, "frage": sub.strip()})
 
+# ---------- Video-Notizen (Quelle, Link, Kernaussage, Regeln mit Zeitstempel) ----------
+videos = {}
+vdir = os.path.join(LIB, "Videos")
+if os.path.isdir(vdir):
+    for vf in sorted(os.listdir(vdir)):
+        if not vf.endswith(".md"):
+            continue
+        vmd = read(os.path.join(vdir, vf))
+        vfm, vbody = frontmatter(vmd)
+        vsecs = sections(vbody)
+        stem = vf[:-3]
+        datum, _, vtitle = stem.partition(" – ")
+        kern = next((" ".join(c["body"]) for c in callouts(vbody) if "kernaussage" in c["title"].lower()), "")
+        regeln = [{"r": inline(r[0]), "t": r[1]} for r in table(find_sec(vsecs, "Regeln"))[1:] if len(r) >= 2]
+        videos[stem] = {"name": stem, "datum": datum, "titel": vtitle or stem, "url": str(vfm.get("quelle", "")),
+                        "kanal": str(vfm.get("kanal", "ICT Gems")), "orig": str(vfm.get("original-quelle", "")),
+                        "laenge": str(vfm.get("länge", "")), "kern": inline(kern), "regeln": regeln}
+
+VIDEO_LINK_RX = re.compile(r"\[\[(\d{4}-\d{2}-\d{2} – [^\]|]+)(?:\|[^\]]*)?\]\]")
+QUESTION_RX = re.compile(r"(?:Backtest[^:?.\n]*:|prüfen:|Prüffrage[^:?.\n]*:)\s*([^?.\n]+\?)")
+
 # ---------- Konzepte ----------
 concepts, gaps = [], {}
 kdir = os.path.join(LIB, "Konzepte")
@@ -274,6 +295,30 @@ for fn in sorted(os.listdir(kdir)):
     stufe = fm.get("stufe", "")
     bt = str(fm.get("backtest", "ungetestet")).strip().lower()
 
+    # Videos der Karte: alle Video-Wikilinks in Reihenfolge, Zeitstempel aus der Quellen-Zeile
+    vnames, vts = [], {}
+    for vn in VIDEO_LINK_RX.findall(body):
+        if vn not in vnames:
+            vnames.append(vn)
+    qline = next((l for l in (detail_c["body"] if detail_c else []) if "Quellen" in l), "")
+    for vn, ts in re.findall(r"\[\[(\d{4}-\d{2}-\d{2} – [^\]|]+)(?:\|[^\]]*)?\]\]\s*@\s*([^·\n]+)", qline):
+        vts[vn] = ts.strip()
+    cvideos = []
+    for vn in vnames:
+        v = videos.get(vn)
+        if v:
+            cvideos.append({**v, "ts": vts.get(vn, "")})
+        else:
+            dat, _, tit = vn.partition(" – ")
+            cvideos.append({"name": vn, "datum": dat, "titel": tit or vn, "url": "", "kanal": "", "orig": "",
+                            "laenge": "", "kern": "", "regeln": [], "ts": vts.get(vn, "")})
+    # Quelle: ICT Gems, außer die Karte sagt „Quelle … nicht … ICT Gems (Kanal)“
+    allp = " ".join(plan_lines + (detail_c["body"] if detail_c else []))
+    mq = re.search(r"Quelle[^.\n]*?nicht[^.\n]*?ICT Gems\s*\(([^)]+)\)", re.sub(r"[*_]", "", allp))
+    quelle = mq.group(1).strip() if mq else "ICT Gems"
+    # Backtest-Prüffragen aus der Karte (nur Sätze mit Fragezeichen hinter „Backtest…:“ / „prüfen:“)
+    fragen = [inline(q.strip()) for q in QUESTION_RX.findall(re.sub(r"[*_]", "", allp))]
+
     src_hash = hashlib.sha1((md + (svg or "")).encode()).hexdigest()[:8]
 
     lack = []
@@ -303,7 +348,7 @@ for fn in sorted(os.listdir(kdir)):
         "planLines": [inline(l) for l in plan_lines],
         "video": [inline(l) for l in (video_c["body"] if video_c else []) if l],
         "details": detail_items, "unklar": unklar, "hash": src_hash, "lack": lack,
-        "extra": extra,
+        "extra": extra, "videos": cvideos, "quelle": quelle, "fragen": fragen,
     })
 
 # ---------- Fehlermuster (3 häufigste, Zahlen aus der Notiz geprüft) ----------
@@ -400,6 +445,17 @@ Gehört zu [[ICT Gems Bibliothek]] · Regeln: [[Trading-Plan ab 15.10.2026]] · 
 
 Ausgeblendet (Plan passt nicht): {', '.join(report['ausgeblendet']) or 'keins'}
 
+## Quelle und Videos je Konzept
+| Konzept | Quelle | Videos |
+|---|---|---|
+""" + "\n".join(f"| {c['abk']} | {c['quelle']}{' ⚠️' if c['quelle'] != 'ICT Gems' else ''} | " +
+                 (" · ".join(f"[[{v['name']}]]" + (f" @ {v['ts']}" if v['ts'] else "") for v in c['videos']) or '–') + " |"
+                 for c in concepts) + f"""
+
+## Backtest-Lab – Prüffragen aus den Karten
+""" + ("\n".join(f"- [ ] **{c['abk']}** ({c['plan']}{' bedingt' if c['planBedingt'] else ''}): {plain(q)}" for c in concepts for q in c['fragen']) or "- keine") + f"""
+- Ohne Prüffrage in der Karte: {', '.join(c['abk'] for c in concepts if not c['fragen']) or 'keins'}
+
 ## So funktioniert die App
 - Startseite: Kacheln nach Stufe der Landkarte, Badges Backtest + Plan. „Plan: passt nicht“ ist ausgeblendet (Schalter „alle zeigen“). Suche findet Namen + aliases.
 - **Jetzt-Filter:** Karte nennt eine Zeit → sie zählt nur innerhalb der Plan-Fenster NY AM 09:30–11:00 / NY PM 13:30–16:00 (nur A+); Fenster außerhalb des Plans stehen als Chip mit ⚠️ „außerhalb Plan“. Karte nennt keine Zeit → Plan-Fenster. Zeilen, die die Karte mit ❌ markiert (Silver Bullet London/07–09), zählen nicht. Umrechnung nach Berlin automatisch, auch in der Zeitumstellungs-Woche.
@@ -415,6 +471,8 @@ Ausgeblendet (Plan passt nicht): {', '.join(report['ausgeblendet']) or 'keins'}
 4. Meldung: neue/geänderte Konzepte + Karten mit Lücken.
 - Karte kann den Plan-Status fest vorgeben mit `plan: passt` oder `plan: passt nicht` im YAML-Kopf. Sonst liest die App den ersten Satz der Plan-Box („Ja“ / „Nur mit …“ = passt, „Nein“ = passt nicht, „… ja, …“ wie „Fenster 2 ja“ = passt (bedingt)).
 - Weitere `##`-Abschnitte einer Karte (z. B. „Richtig einzeichnen“ mit zweiter Skizze) erscheinen eingeklappt in der Konzept-Ansicht.
+- **Aus den Videos:** Jede Konzept-Ansicht zeigt die Quelle (ICT Gems oder anderer Kanal, dann ⚠️) und alle Video-Notizen der Karte als Chips (Datum, Titel, Zeitstempel). Antippen öffnet Kernaussage + Regeln der Video-Notiz, Link führt zum YouTube-Short. „So erkennst du es“ = Ablauf-Tabelle der Karte, offen sichtbar. Ohne Marke = aus dem Video, ⚠️ Deutung = Auslegung, „Mein Plan“ = eigene Regel.
+- **Backtest-Lab (Startseite unten):** flache Liste aller Prüffragen aus den Karten (Sätze hinter „Backtest…:“ oder „prüfen:“ mit Fragezeichen) mit Plan-Status.
 
 ## Offen
 - [ ] SL und TP fehlen in: {', '.join(c['abk'] for c in concepts if trade_missing(c)) or 'keiner'} – kommen erst mit weiteren Videos oder eigenem Backtest.
