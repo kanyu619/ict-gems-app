@@ -160,6 +160,22 @@ details[open] summary::after{content:"–"}
 .vlink{display:inline-block;font:600 14px var(--f-display);color:var(--sl);text-decoration:none;border:1px solid var(--sl);border-radius:20px;padding:6px 12px;min-height:36px}
 .vo{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
 .legend{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+/* Rückfrage */
+.ask{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.askLog{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.askLog:empty{display:none}
+.msg{font-size:14.5px;line-height:1.4;padding:8px 10px;border-radius:12px;max-width:92%;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--ink);color:var(--bg)}
+.msg.ai{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}
+.askSug{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:4px 0 8px}
+.askSug::-webkit-scrollbar{display:none}
+.askSug button{flex:none;font:600 13px var(--f-display);letter-spacing:.02em;border:1px solid var(--line);background:var(--bg);border-radius:16px;padding:7px 11px;min-height:36px;cursor:pointer}
+.askRow{display:flex;gap:8px;align-items:flex-end}
+.askRow textarea{flex:1;min-width:0;min-height:48px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:15px var(--f-body);padding:9px 10px;resize:vertical}
+.askRow button{height:48px;padding:0 14px;border-radius:10px;border:0;background:var(--step);color:#1a1e20;font:700 15px var(--f-display);letter-spacing:.02em;cursor:pointer;flex:none}
+.askRow button:disabled{opacity:.5}
+.askNote{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.askNote a{color:inherit}
 /* Backtest-Lab */
 .lab{display:flex;flex-direction:column;gap:6px}
 .labq{display:flex;flex-direction:column;gap:6px;width:100%;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--step);border-radius:12px;background:var(--surface);text-align:left;cursor:pointer}
@@ -351,6 +367,10 @@ function renderView(c){
    '</div></div>'+
    '<div class="block"><div class="lbl">Zeitfenster · Timeframes</div><div class="chips">'+wins+tfs+'</div></div>'+
    (c.planLines.length?'<div class="planbox"><div class="lbl">⚠️ Passt zu meinem Plan?</div>'+c.planLines.map(l=>'<p>'+l+'</p>').join('')+'</div>':'<div class="planbox"><div class="lbl">Plan-Abgleich</div><p class="miss">— fehlt in Karte</p></div>')+
+   '<div class="ask" id="ask"><div class="lbl">❓ Frage zu dieser Karte</div><div class="askLog" id="askLog"></div>'+
+     '<div class="askSug" id="askSug">'+['Erklär mir das wie einem Anfänger','Woran erkenne ich das live?','Warum passt das (nicht) zu meinem Plan?','Was ist in der Karte noch unklar?'].map(s=>'<button type="button">'+s+'</button>').join('')+'</div>'+
+     '<div class="askRow"><textarea id="askQ" rows="2" placeholder="Deine Frage, z. B. Was heißt CE hier genau?" aria-label="Frage an Claude"></textarea><button type="button" id="askGo">Fragen</button></div>'+
+     '<p class="askNote" id="askNote"></p></div>'+
    (c.unklar.length?'<details open><summary>⚠️ Unklar in der Karte ('+c.unklar.length+')</summary><div class="dbody"><ul>'+c.unklar.map(u=>'<li class="unk">'+u+'</li>').join('')+'</ul></div></details>':'')+
    (c.extra||[]).map(x=>'<details><summary>'+x.title+'</summary><div class="dbody">'+x.svgs.map(u=>'<img class="xsk" alt="" src="'+u+'" data-src="'+u+'">').join('')+(x.items.length?'<ul>'+x.items.map(i=>'<li>'+i+'</li>').join('')+'</ul>':'')+'</div></details>').join('')+
    (c.zeitNotes.length?'<details><summary>Zeit & Timeframes (Karte)</summary><div class="dbody"><ul>'+c.zeitNotes.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
@@ -373,6 +393,79 @@ function renderView(c){
   const openFull=src=>{$('#fullImg').src=src;$('#full').hidden=false;const f=$('#full');if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};
   const sk=$('#skBtn');if(sk)sk.onclick=()=>openFull(c.svg);
   v.querySelectorAll('.xsk').forEach(im=>im.onclick=()=>openFull(im.dataset.src));
+  setupAsk(c);
+}
+/* Rückfrage an Claude: in der claude.ai-Vorschau direkt (sample), in der installierten App über claude.ai */
+const askSample=(window.claude&&typeof window.claude.use==='function')?window.claude.use('sample').catch(()=>null):Promise.resolve(null);
+const askChats={};
+const plainTxt=h=>String(h||'').replace(/<span class="tag-d">[^<]*<\/span>/g,'[Deutung] ').replace(/<span class="tag-p">[^<]*<\/span>/g,'[Mein Plan] ').replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&amp;/g,'&');
+function cardText(c){
+  const T=c.trade,f=k=>{const x=T[k];if(!x||!x.html)return 'fehlt in Karte';return (x.missing?'fehlt in Karte · ':'')+plainTxt(x.html)};
+  const L=['KARTE: '+c.name+' ('+c.abk+') · Stufe '+c.stufe+' · Backtest: '+c.backtest+' · Quelle: '+c.quelle];
+  if(c.satz)L.push('In einem Satz: '+plainTxt(c.satz));
+  if(c.steps.length)L.push('So läuft es ab:\n'+c.steps.map(s=>s.n+'. '+plainTxt(s.name)+' – '+plainTxt(s.see)).join('\n')+(c.stepsNote.length?'\n'+c.stepsNote.map(plainTxt).join('\n'):''));
+  if(c.checks.length)L.push('Checkliste:\n'+c.checks.map(x=>'- '+plainTxt(x)).join('\n'));
+  L.push('Trade: Entry: '+f('entry')+' | SL: '+f('sl')+' | TP: '+f('tp')+' | Ungültig wenn: '+f('inv'));
+  if(c.zeitNotes.length)L.push('Zeit & Timeframes:\n'+c.zeitNotes.map(x=>'- '+plainTxt(x)).join('\n'));
+  if(c.planLines.length)L.push('Passt zu meinem Plan?\n'+c.planLines.map(plainTxt).join('\n'));
+  if(c.unklar.length)L.push('Unklar in der Karte:\n'+c.unklar.map(x=>'- '+plainTxt(x)).join('\n'));
+  (c.extra||[]).forEach(x=>{if(x.items.length)L.push(plainTxt(x.title)+':\n'+x.items.map(i=>'- '+plainTxt(i)).join('\n'))});
+  if(c.details.length)L.push('Details:\n'+c.details.map(x=>'- '+plainTxt(x)).join('\n'));
+  if(c.video.length)L.push('Aus dem Video: '+c.video.map(plainTxt).join(' '));
+  return L.join('\n\n').slice(0,7000);
+}
+const askRules=c=>'Du bist die Lernhilfe in Andrejs ICT-Gems-App (Trading NASDAQ, Konzepte des Traders ICT). Er schaut gerade auf die Konzept-Karte unten und hat eine Rückfrage.\n\nREGELN\n'+
+  '- Deutsch, Du-Form, einfach und kurz: höchstens 8 Sätze oder 5 Stichpunkte. Fachwörter in einfachen Worten erklären.\n'+
+  '- Stütze dich auf die Karte. Was nicht in der Karte steht, markierst du mit „⚠️ nicht aus der Karte“. Erfinde keine Regeln, Zahlen, Uhrzeiten oder Zitate.\n'+
+  '- [Deutung] in der Karte ist Auslegung, nicht ICTs Aussage. Sag das, wenn es für die Antwort zählt.\n'+
+  '- Keine Kauf- oder Verkaufssignale, nichts zum aktuellen Markt. Die App ist ein Abgleich-Werkzeug, kein Signalgeber.\n'+
+  '- Berührt die Frage seinen Trading-Plan, gelten: '+D.plan.hinweise.join(' ')+' Fenster NY AM 09:30–11:00, NY PM 13:30–16:00 nur A+.\n'+
+  '- Kann die Karte die Frage nicht beantworten, sag das klar und nenne, was fehlt.\n\n'+cardText(c);
+const fmtAns=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+async function setupAsk(c){
+  const go=$('#askGo'),q=$('#askQ'),log=$('#askLog'),note=$('#askNote');
+  if(!go)return;
+  const turns=askChats[c.id]||(askChats[c.id]=[]);
+  const render=()=>{log.innerHTML=turns.map(t=>'<div class="msg '+(t.role==='user'?'me':'ai')+'">'+fmtAns(t.content)+'</div>').join('')};
+  render();
+  $('#askSug').onclick=e=>{const b=e.target.closest('button');if(b){q.value=b.textContent;go.click()}};
+  q.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go.click()}};
+  go.disabled=true;go.textContent='…';
+  const sample=await askSample;
+  if(!document.body.contains(go))return;
+  go.disabled=false;
+  if(!sample){
+    go.textContent='In Claude fragen';
+    note.innerHTML='Öffnet Claude mit deiner Frage und dem Karteninhalt. Bleibt das Eingabefeld dort leer: einfügen, der Text ist kopiert.'+(D.artifact&&/^https:\/\/claude\.ai\//.test(D.artifact)?' Antwort direkt hier: <a href="'+esc(D.artifact)+'" target="_blank" rel="noopener">Vorschau auf claude.ai</a>.':'');
+    go.onclick=()=>{
+      const text=q.value.trim()||'Erklär mir diese Karte einfach.';
+      const prompt=askRules(c)+'\n\nFRAGE: '+text;
+      try{navigator.clipboard&&navigator.clipboard.writeText(prompt).catch(()=>{})}catch(e){}
+      window.open('https://claude.ai/new?q='+encodeURIComponent(prompt),'_blank','noopener');
+    };
+    return;
+  }
+  go.textContent='Fragen';
+  let ctl=null;
+  const MSG={not_granted:'Claude ist für diese Seite nicht freigegeben. Freigeben geht über das Menü der Seite.',sampling_disabled:'Claude ist für dein Konto hier nicht verfügbar.',rate_limited:'Gerade zu viele Fragen. Kurz warten, dann noch einmal.',session_expired:'Bitte bei Claude neu anmelden.',refused:'Claude hat die Frage abgelehnt. Anders formulieren.',prompt_too_large:'Zu lang. Kürzer fragen.'};
+  const OFF=['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'];
+  go.onclick=async()=>{
+    if(ctl){ctl.abort();return}
+    const text=q.value.trim();if(!text)return;
+    turns.push({role:'user',content:text});q.value='';render();note.textContent='';
+    const bubble=document.createElement('div');bubble.className='msg ai';bubble.textContent='Denkt nach …';log.append(bubble);
+    ctl=new AbortController();go.textContent='Stopp';
+    try{
+      const r=await sample([{role:'user',content:askRules(c)},...turns.slice(-8)],{modelTier:'quick',cache:false,signal:ctl.signal,onText:({text})=>{bubble.innerHTML=fmtAns(text)}});
+      turns.push({role:'assistant',content:r.text});
+      if(r.truncated)note.textContent='Antwort abgeschnitten. Frag kürzer nach.';
+    }catch(e){
+      const code=e&&e.code;
+      if(e&&e.text&&code!=='refused')turns.push({role:'assistant',content:e.text});else{turns.pop();q.value=text}
+      if(code!=='cancelled')note.textContent=MSG[code]||'Verbindung unterbrochen. Noch einmal fragen.';
+      if(OFF.includes(code)){go.disabled=true}
+    }finally{ctl=null;if(!go.disabled)go.textContent='Fragen';render()}
+  };
 }
 function closeFull(){$('#full').hidden=true;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 $('#full').onclick=closeFull;

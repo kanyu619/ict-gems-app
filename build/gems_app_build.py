@@ -386,7 +386,8 @@ for must in ["NY AM 09:30–11:00", "NY PM 13:30–16:00 nur A+", "Am Handy kein
 
 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=2)))
 stand = now.strftime("%d.%m.%Y %H:%M")
-DATA = {"stand": stand, "stufen": stufen, "concepts": concepts, "fehler": fehler, "plan": PLAN}
+URL = sys.argv[3] if len(sys.argv) > 3 else "(noch nicht veröffentlicht)"
+DATA = {"stand": stand, "stufen": stufen, "concepts": concepts, "fehler": fehler, "plan": PLAN, "artifact": URL}
 
 tpl = read(os.path.join(HERE, "gems_app_template.html"))
 out_html = tpl.replace("/*__DATA__*/null", json.dumps(DATA, ensure_ascii=False))
@@ -473,6 +474,7 @@ Ausgeblendet (Plan passt nicht): {', '.join(report['ausgeblendet']) or 'keins'}
 - Karte kann den Plan-Status fest vorgeben mit `plan: passt` oder `plan: passt nicht` im YAML-Kopf. Sonst liest die App den ersten Satz der Plan-Box („Ja“ / „Nur mit …“ = passt, „Nein“ = passt nicht, „… ja, …“ wie „Fenster 2 ja“ = passt (bedingt)).
 - Weitere `##`-Abschnitte einer Karte (z. B. „Richtig einzeichnen“ mit zweiter Skizze) erscheinen eingeklappt in der Konzept-Ansicht.
 - **Aus den Videos:** Jede Konzept-Ansicht zeigt die Quelle (ICT Gems oder anderer Kanal, dann ⚠️) und alle Video-Notizen der Karte als Chips (Datum, Titel, Zeitstempel). Antippen öffnet Kernaussage + Regeln der Video-Notiz, Link führt zum YouTube-Short. „So erkennst du es“ = Ablauf-Tabelle der Karte, offen sichtbar. Ohne Marke = aus dem Video, ⚠️ Deutung = Auslegung, „Mein Plan“ = eigene Regel.
+- **❓ Frage zu dieser Karte:** unter der Plan-Box. In der Vorschau auf claude.ai antwortet Claude direkt in der Seite (eigenes Claude-Konto, Freigabe beim ersten Mal). In der installierten Handy-App öffnet der Knopf Claude mit Frage + Karteninhalt (Text wird auch kopiert). Claude soll nur aus der Karte antworten, Fremdes mit ⚠️ markieren, keine Signale.
 - **Backtest-Lab (Startseite unten):** flache Liste aller Prüffragen aus den Karten (Sätze hinter „Backtest…:“ oder „prüfen:“ mit Fragezeichen) mit Plan-Status.
 
 ## Offen
