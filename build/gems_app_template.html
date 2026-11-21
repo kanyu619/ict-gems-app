@@ -195,7 +195,27 @@ details[open] summary::after{content:"–"}
 #full{position:fixed;inset:0;z-index:60;background:#fafaf7;display:grid;place-items:center;padding:calc(env(safe-area-inset-top,0px) + 8px) 8px calc(env(safe-area-inset-bottom,0px) + 8px)}
 #full img{max-width:100%;max-height:100%;object-fit:contain}
 #full button{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);width:48px;height:48px;border-radius:50%;border:0;background:#1a1e20;color:#fff;font-size:22px;cursor:pointer}
-@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+/* Bewegung = nur Rückmeldung (Skill motion-design, App-Modus). Kurz, nie blockierend, nur transform/opacity. */
+.tile,.chk,.tf,.tog,.labq,.reset,.iconbtn,.vsk{transition:transform .12s ease-out,background-color .18s ease-out,border-color .18s ease-out}
+.tile:active,.chk:active,.tf:active,.tog:active,.labq:active,.reset:active,.iconbtn:active,.vsk:active{transform:scale(.97)}
+.chk .box{transition:background-color .15s ease-out,border-color .15s ease-out}
+.chk .box svg{width:18px;height:18px;stroke:#fff;stroke-width:3.2;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:24;stroke-dashoffset:0}
+.chk .box.pop svg{animation:gDraw .22s ease-out both}
+.chk .box.pop{animation:gPop .2s ease-out both}
+@keyframes gDraw{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}
+@keyframes gPop{0%{transform:scale(.7)}100%{transform:scale(1)}}
+.amp{transition:background-color .2s ease-out}
+.amp .lamp{position:relative;transition:background-color .2s ease-out}
+.amp .lamp::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:3px solid var(--tp);opacity:0;pointer-events:none}
+.amp.green.ping .lamp::after{animation:gPing .6s ease-out both}
+@keyframes gPing{0%{opacity:.9;transform:scale(.8)}100%{opacity:0;transform:scale(2.1)}}
+.prog{position:absolute;left:0;top:-1px;height:3px;width:100%;background:var(--sl);transform-origin:left;transform:scaleX(0);transition:transform .2s ease-out,background-color .2s ease-out}
+.prog.full{background:var(--tp)}
+.now.on .dot,.now.aplus .dot{position:relative}
+.now.on .dot{color:var(--tp)} .now.aplus .dot{color:var(--step)}
+.now.on .dot::after,.now.aplus .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid currentColor;opacity:0;animation:gLive 2.4s ease-out infinite}
+@keyframes gLive{0%{opacity:.7;transform:scale(.9)}70%,100%{opacity:0;transform:scale(1.9)}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 </style>
 
 <header class="top">
@@ -234,6 +254,9 @@ const $ = s => document.querySelector(s);
 const store = {get(k,d){try{const v=localStorage.getItem('gems:'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('gems:'+k,JSON.stringify(v))}catch(e){}}};
 const state = {q:'', now:store.get('now',false), all:store.get('all',false), checks:{}};
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const anim = (el,kf,o) => {if(el&&el.animate&&!RM())el.animate(kf,o)};
+const CHK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const norm = s => String(s).toLowerCase().replace(/<[^>]+>/g,'').replace(/[^a-z0-9äöüß]/g,'');
 
 /* Theme */
@@ -359,7 +382,7 @@ function renderView(c){
    (c.steps.length?'<div class="block"><div class="lbl">So erkennst du es</div><div class="steps">'+c.steps.map(s=>'<div'+(s.no?' class="no"':'')+'><span class="n">'+esc(s.n)+'</span><span><b>'+s.name+'</b> – '+s.see+'</span></div>').join('')+'</div>'+(c.stepsNote.length?'<p class="vo">'+c.stepsNote.join('<br>')+'</p>':'')+'<p class="legend">ohne Marke = aus dem Video · <span class="tag-d">⚠️ Deutung</span>= Auslegung · <span class="tag-p">Mein Plan</span>= eigene Regel</p></div>':'')+
    '<div class="block fmini">'+D.fehler.map(f=>'<span>'+esc(f.q)+'</span>').join('')+'</div>'+
    '<div class="block"><div class="lbl">Checkliste – nur wenn alles ✔</div><div class="checks">'+
-     (c.checks.length?c.checks.map((t,i)=>'<button class="chk" role="checkbox" aria-checked="'+ch[i]+'" data-i="'+i+'"><span class="box">'+(ch[i]?'✓':'')+'</span><span class="ct">'+t+'</span></button>').join(''):MISS)+'</div></div>'+
+     (c.checks.length?c.checks.map((t,i)=>'<button class="chk" role="checkbox" aria-checked="'+ch[i]+'" data-i="'+i+'"><span class="box">'+(ch[i]?CHK:'')+'</span><span class="ct">'+t+'</span></button>').join(''):MISS)+'</div></div>'+
    '<div class="block"><div class="lbl">Trade auf einen Blick</div><div class="trade">'+
      '<button class="tf e"><div class="k">🎯 Entry</div><div class="v">'+field(T.entry)+'</div></button>'+
      '<button class="tf s"><div class="k">🛑 SL</div><div class="v">'+field(T.sl)+'</div></button>'+
@@ -378,20 +401,25 @@ function renderView(c){
    (c.details.length?'<details><summary>Details, Varianten, Quellen</summary><div class="dbody"><ul>'+c.details.map(z=>'<li>'+z+'</li>').join('')+'</ul></div></details>':'')+
    (c.video.length?'<details><summary>📸 Aus dem Video</summary><div class="dbody"><p>'+c.video.join('<br>')+'</p></div></details>':'')+
    '</div>'+
-   '<div class="bar"><div class="amp" id="amp"><div class="lamp"></div><div class="at"><b id="ampT"></b><span id="ampS"></span></div></div><button class="reset" id="rst">Neu</button></div>';
-  v.hidden=false;v.scrollTop=0;document.body.style.overflow='hidden';
-  const amp=()=>{const miss=c.checks.findIndex((_,i)=>!ch[i]);const a=$('#amp');
+   '<div class="bar"><div class="prog" id="prog"></div><div class="amp" id="amp"><div class="lamp"></div><div class="at"><b id="ampT"></b><span id="ampS"></span></div></div><button class="reset" id="rst">Neu</button></div>';
+  const wasHidden=v.hidden;v.hidden=false;v.scrollTop=0;document.body.style.overflow='hidden';
+  if(wasHidden)anim(v,[{opacity:.4,transform:'translateX(24px)'},{opacity:1,transform:'none'}],{duration:200,easing:'cubic-bezier(.2,.8,.2,1)'});
+  let wasGreen=null;
+  const amp=()=>{const miss=c.checks.findIndex((_,i)=>!ch[i]);const a=$('#amp');const pr=$('#prog');
+    if(pr){const n=c.checks.length;pr.style.transform='scaleX('+(n?ch.filter(Boolean).length/n:0)+')';pr.classList.toggle('full',n>0&&miss<0)}
+    const g=c.checks.length>0&&miss<0;const ping=g&&wasGreen===false;wasGreen=g;
     if(!c.checks.length){a.className='amp red';$('#ampT').textContent='Keine Checkliste';$('#ampS').textContent='— fehlt in Karte';return}
-    if(miss<0){a.className='amp green';$('#ampT').textContent='Alle '+c.checks.length+' Punkte ✔';$('#ampS').textContent='Bild passt zur Karte · Plan-Box beachten'}
+    if(miss<0){a.className='amp green';if(ping&&!RM()){void a.offsetWidth;a.classList.add('ping');try{navigator.vibrate&&navigator.vibrate(15)}catch(e){}}$('#ampT').textContent='Alle '+c.checks.length+' Punkte ✔';$('#ampS').textContent='Bild passt zur Karte · Plan-Box beachten'}
     else{a.className='amp red';const done=ch.filter(Boolean).length;$('#ampT').textContent='Fehlt ('+done+'/'+c.checks.length+')';$('#ampS').textContent=c.checks[miss].replace(/<span class="tag-[dp]">[^<]*<\/span>/g,'').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&')}};
   amp();
-  v.querySelectorAll('.chk').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;ch[i]=!ch[i];b.setAttribute('aria-checked',ch[i]);b.querySelector('.box').textContent=ch[i]?'✓':'';amp()});
+  v.querySelectorAll('.chk').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;ch[i]=!ch[i];b.setAttribute('aria-checked',ch[i]);const bx=b.querySelector('.box');bx.classList.remove('pop');bx.innerHTML=ch[i]?CHK:'';if(ch[i]&&!RM()){void bx.offsetWidth;bx.classList.add('pop')}amp()});
   v.querySelectorAll('.tf').forEach(b=>b.onclick=()=>b.classList.toggle('open'));
   const sz=$('#satz');if(sz)sz.onclick=()=>sz.classList.toggle('open');
-  v.querySelectorAll('.vhd').forEach(b=>b.onclick=()=>{const bd=b.nextElementSibling;bd.hidden=!bd.hidden;b.classList.toggle('open',!bd.hidden)});
-  $('#rst').onclick=()=>{ch.fill(false);v.querySelectorAll('.chk').forEach(b=>{b.setAttribute('aria-checked','false');b.querySelector('.box').textContent=''});amp()};
+  v.querySelectorAll('.vhd').forEach(b=>b.onclick=()=>{const bd=b.nextElementSibling;bd.hidden=!bd.hidden;b.classList.toggle('open',!bd.hidden);if(!bd.hidden)anim(bd,[{opacity:0,transform:'translateY(-4px)'},{opacity:1,transform:'none'}],{duration:160,easing:'ease-out'})});
+  v.querySelectorAll('details').forEach(d=>d.addEventListener('toggle',()=>{if(d.open)anim(d.querySelector('.dbody'),[{opacity:0,transform:'translateY(-4px)'},{opacity:1,transform:'none'}],{duration:160,easing:'ease-out'})}));
+  $('#rst').onclick=()=>{ch.fill(false);v.querySelectorAll('.chk').forEach(b=>{b.setAttribute('aria-checked','false');b.querySelector('.box').innerHTML=''});amp()};
   $('#back').onclick=()=>{location.hash=''};
-  const openFull=src=>{$('#fullImg').src=src;$('#full').hidden=false;const f=$('#full');if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};
+  const openFull=src=>{$('#fullImg').src=src;$('#full').hidden=false;const f=$('#full');anim(f,[{opacity:0},{opacity:1}],{duration:150,easing:'ease-out'});if(f.requestFullscreen)f.requestFullscreen().catch(()=>{})};
   const sk=$('#skBtn');if(sk)sk.onclick=()=>openFull(c.svg);
   v.querySelectorAll('.xsk').forEach(im=>im.onclick=()=>openFull(im.dataset.src));
   setupAsk(c);
